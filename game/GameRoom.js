@@ -125,7 +125,10 @@ class GameRoom {
   dropPiece(playerId, pieceId, x, y) {
     const piece = this.pieces.find(p => p.id === pieceId);
     const player = this.players.get(playerId);
-    if (!piece || !player || piece.heldBy !== playerId) return { placed: false, x, y };
+    // x,y from client are piece CENTER; return current piece top-left to avoid stuck-on-board
+    if (!piece || !player || piece.heldBy !== playerId) {
+      return { placed: false, x: piece ? piece.x : x, y: piece ? piece.y : y };
+    }
 
     piece.heldBy = null;
     player.holdingId = null;
@@ -142,8 +145,9 @@ class GameRoom {
       player.score += 1;
       return { placed: true };
     } else {
-      piece.x = Math.max(TRAY_LEFT + 4, Math.min(TRAY_LEFT + TRAY_W - PSZ - 4, x));
-      piece.y = Math.max(TRAY_TOP + 4, Math.min(TRAY_TOP + TRAY_H - PSZ - 4, y));
+      // x,y are center coords; convert to top-left before clamping
+      piece.x = Math.max(TRAY_LEFT + 4, Math.min(TRAY_LEFT + TRAY_W - PSZ - 4, x - PSZ / 2));
+      piece.y = Math.max(TRAY_TOP + 4, Math.min(TRAY_TOP + TRAY_H - PSZ - 4, y - PSZ / 2));
       return { placed: false, x: piece.x, y: piece.y };
     }
   }

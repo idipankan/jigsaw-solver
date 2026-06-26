@@ -501,7 +501,10 @@ function startTimer(timerEndsAt) {
     const m = Math.floor(totalSecs / 60);
     const s = totalSecs % 60;
     $('disp-timer').textContent = `${m}:${String(s).padStart(2, '0')}`;
-    if (remaining === 0) clearInterval(timerInterval);
+    if (remaining === 0) {
+      clearInterval(timerInterval);
+      if (!winBanner.classList.contains('open')) showTimerWinner();
+    }
   }
   tick();
   timerInterval = setInterval(tick, 1000);
@@ -511,10 +514,32 @@ function startTimer(timerEndsAt) {
 function checkWin() {
   if (pieces.length > 0 && pieces.every(p => p.placed)) {
     const winner = [...players].sort((a, b) => b.score - a.score)[0];
+    $('win-title').textContent = 'puzzle complete!';
     $('win-sub').textContent = `all ${pieces.length} pieces placed · winner: ${winner?.name || '—'}`;
     winBanner.classList.add('open');
     clearInterval(timerInterval);
   }
+}
+
+function showTimerWinner() {
+  const ranked = [...players].sort((a, b) => b.score - a.score);
+  const winner = ranked[0];
+  const placed = pieces.filter(p => p.placed).length;
+
+  $('win-title').textContent = "time's up!";
+
+  if (!winner || winner.score === 0) {
+    $('win-sub').textContent = `${placed}/${pieces.length} pieces placed · no winner`;
+  } else {
+    const tied = ranked.filter(p => p.score === winner.score);
+    if (tied.length > 1) {
+      $('win-sub').textContent = `${placed}/${pieces.length} placed · tie: ${tied.map(p => escHtml(p.name)).join(' & ')}`;
+    } else {
+      $('win-sub').textContent = `${placed}/${pieces.length} placed · winner: ${escHtml(winner.name)} (${winner.score} pieces)`;
+    }
+  }
+
+  winBanner.classList.add('open');
 }
 
 /* ── Event listeners ── */
