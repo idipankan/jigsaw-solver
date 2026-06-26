@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jigsaw Solver — multiplayer jigsaw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1a1a1a; }
+
+@keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+@keyframes pop { 0%{transform:scale(.8);opacity:0} 60%{transform:scale(1.05);opacity:1} 100%{transform:scale(1);opacity:1} }
+@keyframes fadein { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+/* ── Lobby overlay ── */
+#lobby {
+  position: fixed; inset: 0; background: #F4F2EC;
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.lobby-card {
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 6px;
+  padding: 40px 48px; display: flex; flex-direction: column; gap: 28px;
+  min-width: 380px; animation: pop .2s ease-out;
+}
+.lobby-logo { display: flex; align-items: center; gap: 10px; }
+.lobby-logo-icon {
+  width: 28px; height: 28px; border-radius: 5px; background: #1a1a1a;
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 2px; padding: 4px;
+}
+.lobby-logo-icon div:nth-child(1){background:#E8B547}
+.lobby-logo-icon div:nth-child(2){background:#C8533C}
+.lobby-logo-icon div:nth-child(3){background:#2A4D6E}
+.lobby-logo-icon div:nth-child(4){background:#F2E8D5}
+.lobby-logo-name { font-weight: 600; font-size: 18px; }
+.lobby-tagline { font: 300 13px 'IBM Plex Mono', monospace; color: #6b6b6b; }
+.lobby-fields { display: flex; flex-direction: column; gap: 14px; }
+.lobby-label { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 5px; }
+.lobby-input {
+  width: 100%; border: 1px solid #E5E2D9; border-radius: 4px;
+  padding: 9px 12px; font: 400 13px 'IBM Plex Mono', monospace; color: #1a1a1a;
+  background: #FBFAF6; outline: none;
+}
+.lobby-input:focus { border-color: #1a1a1a; }
+.lobby-btn {
+  width: 100%; background: #1a1a1a; color: #fff; border: none; border-radius: 4px;
+  padding: 11px; font: 500 13px 'IBM Plex Mono', monospace; cursor: pointer; letter-spacing: .04em;
+  transition: opacity .15s;
+}
+.lobby-btn:hover { opacity: .8; }
+.lobby-divider { height: 1px; background: #E5E2D9; }
+.lobby-pieces-row { display: flex; gap: 8px; align-items: center; }
+.lobby-pieces-row .lobby-label { margin-bottom: 0; }
+.pieces-option {
+  border: 1px solid #E5E2D9; border-radius: 3px; padding: 4px 10px;
+  font: 400 12px 'IBM Plex Mono', monospace; color: #9a9a9a; cursor: pointer; background: transparent;
+}
+.pieces-option.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.time-option {
+  border: 1px solid #E5E2D9; border-radius: 3px; padding: 4px 10px;
+  font: 400 12px 'IBM Plex Mono', monospace; color: #9a9a9a; cursor: pointer; background: transparent;
+}
+.time-option.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+/* ── App shell ── */
+#app {
+  position: absolute;
+  width: 1280px; height: 800px;
+  background: #F4F2EC; overflow: hidden; user-select: none;
+  transform-origin: top left;
+}
+
+/* ── Image URL popover ── */
+#img-url-popover {
+  display: none; position: absolute; top: 68px; left: 280px;
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 12px 14px;
+  z-index: 400; display: none; flex-direction: column; gap: 8px; min-width: 420px;
+}
+#img-url-popover.open { display: flex; }
+.img-popover-label { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .1em; }
+.img-popover-row { display: flex; gap: 8px; }
+.img-popover-input {
+  flex: 1; border: 1px solid #E5E2D9; border-radius: 3px;
+  padding: 7px 10px; font: 400 12px 'IBM Plex Mono', monospace; color: #1a1a1a;
+  background: #FBFAF6; outline: none;
+}
+.img-popover-input:focus { border-color: #1a1a1a; }
+.img-popover-btn {
+  background: #1a1a1a; color: #fff; border: none; border-radius: 3px;
+  padding: 7px 14px; font: 500 11px 'IBM Plex Mono', monospace; cursor: pointer; white-space: nowrap;
+}
+.img-popover-hint { font: 400 10px 'IBM Plex Mono', monospace; color: #9a9a9a; }
+.img-url-bar { cursor: pointer; transition: border-color .15s; }
+.img-url-bar:hover { border-color: #1a1a1a; }
+
+/* ── Top bar ── */
+#topbar {
+  position: absolute; left: 0; top: 0; width: 1280px; height: 64px;
+  background: #fff; border-bottom: 1px solid #E5E2D9;
+  display: flex; align-items: center; padding: 0 24px; gap: 24px;
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon {
+  width: 22px; height: 22px; border-radius: 4px; background: #1a1a1a;
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 1px; padding: 3px;
+}
+.logo-icon div:nth-child(1){background:#E8B547}
+.logo-icon div:nth-child(2){background:#C8533C}
+.logo-icon div:nth-child(3){background:#2A4D6E}
+.logo-icon div:nth-child(4){background:#F2E8D5}
+.logo-name { font-weight: 600; font-size: 14px; letter-spacing: -.01em; }
+.divider-v { height: 24px; width: 1px; background: #E5E2D9; }
+.room-info { display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6b6b6b; }
+.room-code { color: #1a1a1a; letter-spacing: .06em; }
+.copy-btn {
+  background: transparent; border: 1px solid #E5E2D9; border-radius: 3px;
+  padding: 3px 7px; font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; cursor: pointer;
+}
+.img-url-bar {
+  flex: 1; display: flex; align-items: center; gap: 10px; max-width: 520px;
+  background: #F4F2EC; border: 1px solid #E5E2D9; border-radius: 4px; padding: 6px 10px;
+}
+.img-url-label { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.img-url-text { font: 400 12px 'IBM Plex Mono', monospace; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.img-url-status { margin-left: auto; font: 500 10px 'IBM Plex Mono', monospace; color: #1F8A5B; white-space: nowrap; }
+.pieces-select { display: flex; align-items: center; gap: 6px; }
+.pieces-select-label { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .08em; }
+.pieces-badge {
+  font: 500 12px 'IBM Plex Mono', monospace; color: #1a1a1a;
+  padding: 4px 10px; background: #F4F2EC; border: 1px solid #E5E2D9; border-radius: 3px;
+}
+.ref-btn, .overlay-btn {
+  display: flex; align-items: center; gap: 6px; background: #fff;
+  border: 1px solid #E5E2D9; border-radius: 4px; padding: 6px 10px;
+  cursor: pointer; font: 500 11px 'IBM Plex Mono', monospace; color: #1a1a1a;
+}
+.overlay-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.overlay-btn.active .overlay-dot { background: #E8B547; }
+.overlay-dot { width: 8px; height: 8px; border-radius: 50%; background: #E5E2D9; flex-shrink: 0; }
+.timer-badge {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: #1a1a1a; color: #fff; border-radius: 4px;
+}
+.timer-dot { width: 6px; height: 6px; background: #E8B547; border-radius: 50%; animation: blink 1.4s infinite; }
+.timer-text { font: 500 14px 'IBM Plex Mono', monospace; letter-spacing: .04em; }
+
+/* ── Sub-bar ── */
+#subbar {
+  position: absolute; left: 24px; top: 80px; right: 24px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sub-left { font: 300 11px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; }
+.sub-right { display: flex; gap: 16px; font: 400 11px 'IBM Plex Mono', monospace; color: #6b6b6b; }
+.sub-right .val { color: #1a1a1a; }
+
+/* ── Leaderboard ── */
+#leaderboard {
+  position: absolute; left: 24px; top: 120px; width: 240px; height: 640px;
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 4px;
+  padding: 20px; display: flex; flex-direction: column; gap: 0; overflow: hidden;
+}
+#lb-list {
+  flex: 1; overflow-y: auto; min-height: 0;
+  scrollbar-width: thin; scrollbar-color: #E5E2D9 transparent;
+}
+.panel-title { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 16px; }
+.lb-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px; margin-bottom: 4px; border-radius: 3px;
+  border: 1px solid transparent;
+}
+.lb-row.you { background: #F4F2EC; border-color: #E5E2D9; }
+.lb-left { display: flex; align-items: center; gap: 10px; }
+.lb-rank { font: 500 10px 'IBM Plex Mono', monospace; color: #9a9a9a; width: 18px; }
+.lb-dot { width: 10px; height: 10px; border-radius: 50%; }
+.lb-meta { display: flex; flex-direction: column; gap: 1px; }
+.lb-name { font: 500 13px 'IBM Plex Sans', sans-serif; color: #1a1a1a; display: flex; align-items: center; gap: 6px; }
+.lb-you-tag { font: 500 8px 'IBM Plex Mono', monospace; color: #6b6b6b; border: 1px solid #E5E2D9; padding: 1px 4px; border-radius: 2px; letter-spacing: .08em; }
+.lb-status { font: 400 10px 'IBM Plex Mono', monospace; color: #9a9a9a; }
+.lb-score { font: 500 18px 'IBM Plex Sans', sans-serif; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+
+.feed-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid #E5E2D9; }
+.feed-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; font: 400 11px 'IBM Plex Mono', monospace; color: #6b6b6b; animation: fadein .2s ease-out; }
+.feed-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.feed-text { line-height: 1.4; flex: 1; }
+.feed-text .name { color: #1a1a1a; }
+.feed-ago { margin-left: auto; color: #bdbdbd; white-space: nowrap; }
+
+.lb-actions { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; }
+.lb-btn {
+  flex: 1; background: #fff; border: 1px solid #E5E2D9; border-radius: 3px;
+  padding: 8px; font: 500 11px 'IBM Plex Mono', monospace; color: #1a1a1a; cursor: pointer;
+}
+.lb-btn.muted { color: #6b6b6b; }
+.lb-btn:hover { background: #F4F2EC; }
+
+/* ── Stage ── */
+#stage {
+  position: absolute; left: 280px; top: 120px; width: 976px; height: 640px;
+}
+
+/* ── Board ── */
+#board-container {
+  position: absolute; left: 0; top: 0; width: 560px; height: 640px;
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 4px; padding: 30px;
+}
+.board-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.board-title { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; }
+.board-hint { font: 400 10px 'IBM Plex Mono', monospace; color: #9a9a9a; }
+#board-grid {
+  position: relative; width: 500px; height: 500px;
+  background-color: #FBFAF6; border: 1px solid #EDE9DC;
+}
+.grid-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(to right,rgba(0,0,0,.04) 1px,transparent 1px),
+                    linear-gradient(to bottom,rgba(0,0,0,.04) 1px,transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* ── Tray ── */
+#tray-container {
+  position: absolute; left: 584px; top: 0; width: 392px; height: 640px;
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 4px; padding: 24px;
+}
+.tray-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.tray-title { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; }
+.tray-count { font: 400 10px 'IBM Plex Mono', monospace; color: #9a9a9a; }
+#tray-area { position: relative; width: 344px; height: 560px; background: #FBFAF6; border: 1px solid #EDE9DC; overflow: hidden; }
+
+/* ── Pieces layer ── */
+#pieces-layer { position: absolute; inset: 0; pointer-events: none; }
+.piece {
+  position: absolute; cursor: grab; border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 10px rgba(0,0,0,.10);
+  pointer-events: auto; transition: box-shadow .15s;
+  will-change: transform;
+}
+.piece.dragging { cursor: grabbing; z-index: 90 !important; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+.piece.placed { cursor: default; pointer-events: none; transition: left .18s ease, top .18s ease, box-shadow .25s; }
+.piece.just-placed { box-shadow: 0 0 0 2px var(--placed-color), 0 0 0 4px color-mix(in srgb, var(--placed-color) 20%, transparent); }
+
+/* ── Cursors ── */
+.cursor-wrap {
+  position: absolute; pointer-events: none; z-index: 200;
+  transition: left .06s linear, top .06s linear;
+}
+.cursor-label {
+  position: absolute; left: 16px; top: 18px; color: #fff;
+  font: 500 10px 'IBM Plex Mono', monospace; padding: 2px 6px;
+  border-radius: 2px; white-space: nowrap; letter-spacing: .04em;
+}
+
+/* ── Reference modal ── */
+#ref-modal {
+  display: none; position: absolute; inset: 0;
+  background: rgba(20,20,20,.55); backdrop-filter: blur(6px);
+  z-index: 500; align-items: center; justify-content: center;
+}
+#ref-modal.open { display: flex; }
+.ref-card {
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 4px;
+  padding: 24px; display: flex; flex-direction: column; gap: 16px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.25); animation: pop .18s ease-out;
+}
+.ref-card-header { display: flex; justify-content: space-between; align-items: center; gap: 32px; }
+.ref-card-info .ref-label { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; }
+.ref-card-info .ref-title { font: 500 15px 'IBM Plex Sans', sans-serif; color: #1a1a1a; margin-top: 3px; }
+.ref-close-btn {
+  background: transparent; border: 1px solid #E5E2D9; border-radius: 3px;
+  padding: 6px 10px; font: 500 11px 'IBM Plex Mono', monospace; color: #1a1a1a; cursor: pointer;
+}
+.ref-img { display: block; border: 1px solid #EDE9DC; }
+.ref-footer { display: flex; justify-content: space-between; font: 400 10px 'IBM Plex Mono', monospace; color: #9a9a9a; }
+
+/* ── Win banner ── */
+#win-banner {
+  display: none; position: absolute; inset: 0;
+  background: rgba(20,20,20,.7); backdrop-filter: blur(8px);
+  z-index: 600; align-items: center; justify-content: center;
+}
+#win-banner.open { display: flex; }
+.win-card {
+  background: #fff; border: 1px solid #E5E2D9; border-radius: 6px;
+  padding: 40px 56px; display: flex; flex-direction: column;
+  align-items: center; gap: 20px; animation: pop .22s ease-out;
+}
+.win-title { font: 600 28px 'IBM Plex Sans', sans-serif; }
+.win-sub { font: 400 13px 'IBM Plex Mono', monospace; color: #6b6b6b; }
+.win-play-btn {
+  background: #1a1a1a; color: #fff; border: none; border-radius: 4px;
+  padding: 11px 28px; font: 500 13px 'IBM Plex Mono', monospace; cursor: pointer;
+  letter-spacing: .04em; margin-top: 8px;
+}
+</style>
+</head>
+<body>
+
+<!-- Lobby -->
+<div id="lobby">
+  <div class="lobby-card">
+    <div class="lobby-logo">
+      <div class="lobby-logo-icon"><div></div><div></div><div></div><div></div></div>
+      <div class="lobby-logo-name">Jigsaw Solver</div>
+    </div>
+    <div class="lobby-tagline">multiplayer jigsaw puzzle</div>
+    <div class="lobby-divider"></div>
+    <div class="lobby-fields">
+      <div>
+        <div class="lobby-label">your name</div>
+        <input class="lobby-input" id="inp-name" placeholder="enter name" maxlength="16" autocomplete="off">
+      </div>
+      <div>
+        <div class="lobby-label">room code <span style="font-weight:300;color:#bdbdbd">(leave blank to create new)</span></div>
+        <input class="lobby-input" id="inp-room" placeholder="e.g. CRMSN-9F2" maxlength="12" autocomplete="off" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div>
+      <div class="lobby-label" style="margin-bottom:10px">piece count</div>
+      <div class="lobby-pieces-row">
+        <button class="pieces-option" data-count="64">64</button>
+        <button class="pieces-option active" data-count="100">100</button>
+        <button class="pieces-option" data-count="196">196</button>
+        <button class="pieces-option" data-count="256">256</button>
+      </div>
+    </div>
+    <div>
+      <div class="lobby-label" style="margin-bottom:10px">time limit <span style="font-weight:300;color:#bdbdbd">(room creator sets this)</span></div>
+      <div class="lobby-pieces-row" style="flex-wrap:wrap;gap:6px">
+        <button class="time-option" data-mins="5">5 min</button>
+        <button class="time-option active" data-mins="10">10 min</button>
+        <button class="time-option" data-mins="15">15 min</button>
+        <button class="time-option" data-mins="20">20 min</button>
+        <button class="time-option" data-mins="30">30 min</button>
+        <button class="time-option" data-mins="0">∞ no limit</button>
+      </div>
+    </div>
+    <div>
+      <div class="lobby-label" style="margin-bottom:8px">puzzle image <span style="font-weight:300;color:#bdbdbd">(optional — room creator sets this)</span></div>
+      <input class="lobby-input" id="inp-image-url" type="url" placeholder="https://example.com/image.jpg  (leave blank for default)" autocomplete="off">
+      <div style="margin-top:5px;font:400 10px 'IBM Plex Mono',monospace;color:#bdbdbd">supports jpeg · png · webp · svg</div>
+    </div>
+    <button class="lobby-btn" id="join-btn">play →</button>
+  </div>
+</div>
+
+<!-- App (hidden until joined) -->
+<div id="app" style="display:none">
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <div class="logo">
+      <div class="logo-icon"><div></div><div></div><div></div><div></div></div>
+      <div class="logo-name">Jigsaw Solver</div>
+    </div>
+    <div class="divider-v"></div>
+    <div class="room-info">
+      <span>room</span>
+      <span class="room-code" id="disp-room-code">——</span>
+      <button class="copy-btn" id="copy-btn">copy</button>
+    </div>
+    <div class="img-url-bar" id="img-url-bar" title="Click to change image">
+      <span class="img-url-label">img url</span>
+      <span class="img-url-text" id="img-url-text">data:image/svg+xml — composition no. 7</span>
+      <span class="img-url-status" id="img-url-status">● loaded</span>
+    </div>
+    <div class="pieces-select">
+      <span class="pieces-select-label">pieces</span>
+      <span class="pieces-badge" id="disp-piece-count">100</span>
+    </div>
+    <button class="ref-btn" id="ref-btn">
+      <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="4.5" r="1" fill="currentColor"/><path d="M1.5 9 L4.5 6 L7 8 L10.5 4 L10.5 10.5 L1.5 10.5 Z" fill="currentColor"/></svg>
+      <span>reference</span>
+    </button>
+    <button class="overlay-btn" id="overlay-btn" title="Toggle board overlay (visible only to you)">
+      <div class="overlay-dot"></div>
+      <span>overlay</span>
+    </button>
+    <div class="timer-badge">
+      <div class="timer-dot"></div>
+      <div class="timer-text" id="disp-timer">5:00</div>
+    </div>
+  </div>
+
+  <!-- Image URL popover -->
+  <div id="img-url-popover">
+    <div class="img-popover-label">load image from url</div>
+    <div class="img-popover-row">
+      <input class="img-popover-input" id="img-url-input" type="url" placeholder="https://example.com/image.jpg" autocomplete="off">
+      <button class="img-popover-btn" id="img-url-apply-btn">load →</button>
+    </div>
+    <div class="img-popover-hint">supports jpeg, png, webp, svg · applies to all players · press esc to cancel</div>
+  </div>
+
+  <!-- Sub-bar -->
+  <div id="subbar">
+    <div class="sub-left">live session · <span id="disp-player-count">1</span> player · <span id="disp-progress">0% complete</span></div>
+    <div class="sub-right">
+      <span><span class="val" id="disp-placed">0</span>/100 placed</span>
+      <span><span class="val" id="disp-remaining">100</span> remaining</span>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="leaderboard">
+    <div class="panel-title">Leaderboard</div>
+    <div id="lb-list"></div>
+    <div class="feed-section">
+      <div class="panel-title">Recent</div>
+      <div id="feed-list"></div>
+    </div>
+    <div class="lb-actions">
+      <button class="lb-btn" id="scramble-btn">scramble</button>
+      <button class="lb-btn muted" id="leave-btn">leave</button>
+    </div>
+  </div>
+
+  <!-- Stage -->
+  <div id="stage">
+    <!-- Board -->
+    <div id="board-container">
+      <div class="board-header">
+        <div class="board-title" id="board-label">Board · 10 × 10</div>
+        <div class="board-hint">drag pieces from tray →</div>
+      </div>
+      <div id="board-grid">
+        <img id="board-ghost-img" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:0.18;pointer-events:none;display:block;">
+        <div class="grid-overlay"></div>
+      </div>
+    </div>
+
+    <!-- Tray -->
+    <div id="tray-container">
+      <div class="tray-header">
+        <div class="tray-title">Tray</div>
+        <div class="tray-count"><span id="disp-tray-count">100</span> pieces</div>
+      </div>
+      <div id="tray-area"></div>
+    </div>
+
+    <!-- Pieces & cursors layer (stage-relative) -->
+    <div id="pieces-layer"></div>
+  </div>
+
+  <!-- Reference modal -->
+  <div id="ref-modal">
+    <div class="ref-card" id="ref-card">
+      <div class="ref-card-header">
+        <div class="ref-card-info">
+          <div class="ref-label">Reference</div>
+          <div class="ref-title">composition no. 7</div>
+        </div>
+        <button class="ref-close-btn" id="ref-close-btn">close · esc</button>
+      </div>
+      <img id="ref-img" class="ref-img" width="420" height="420">
+      <div class="ref-footer">
+        <span id="ref-dims">10 × 10 · 100 pieces</span>
+        <span>click anywhere to dismiss</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Win banner -->
+  <div id="win-banner">
+    <div class="win-card">
+      <div class="win-title">puzzle complete!</div>
+      <div class="win-sub" id="win-sub">all 100 pieces placed</div>
+      <button class="win-play-btn" id="play-again-btn">play again →</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
