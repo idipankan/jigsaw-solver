@@ -346,7 +346,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; f
         <input class="lobby-input" id="inp-room" placeholder="e.g. CRMSN-9F2" maxlength="12" autocomplete="off" style="text-transform:uppercase">
       </div>
     </div>
-    <div>
+    <div id="lobby-piece-count-section">
       <div class="lobby-label" style="margin-bottom:10px">piece count</div>
       <div class="lobby-pieces-row">
         <button class="pieces-option" data-count="64">64</button>
@@ -355,7 +355,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; f
         <button class="pieces-option" data-count="256">256</button>
       </div>
     </div>
-    <div>
+    <div id="lobby-time-limit-section">
       <div class="lobby-label" style="margin-bottom:10px">time limit <span style="font-weight:300;color:#bdbdbd">(room creator sets this)</span></div>
       <div class="lobby-pieces-row" style="flex-wrap:wrap;gap:6px">
         <button class="time-option" data-mins="5">5 min</button>
@@ -366,7 +366,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; f
         <button class="time-option" data-mins="0">∞ no limit</button>
       </div>
     </div>
-    <div>
+    <div id="lobby-image-section">
       <div class="lobby-label" style="margin-bottom:8px">puzzle image <span style="font-weight:300;color:#bdbdbd">(optional — room creator sets this)</span></div>
       <input class="lobby-input" id="inp-image-url" type="url" placeholder="https://example.com/image.jpg  (leave blank for default)" autocomplete="off">
       <div style="margin-top:5px;font:400 10px 'IBM Plex Mono',monospace;color:#bdbdbd">supports jpeg · png · webp · svg</div>

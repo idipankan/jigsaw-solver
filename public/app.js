@@ -162,6 +162,31 @@ const refModal = $('ref-modal');
 const refImg = $('ref-img');
 const winBanner = $('win-banner');
 
+/* ── URL deep-link: ?roomCode=XYZ pre-fills and locks the room code ── */
+(function initFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const urlRoom = params.get('roomCode');
+  if (!urlRoom) return;
+
+  const inp = $('inp-room');
+  inp.value = urlRoom.toUpperCase();
+  inp.readOnly = true;
+  inp.style.background = '#F4F2EC';
+  inp.style.color = '#6b6b6b';
+  inp.style.cursor = 'default';
+
+  // Update the label hint to reflect that we're joining, not creating
+  const hint = inp.closest('div')?.querySelector('.lobby-label span');
+  if (hint) hint.textContent = '— joining existing room';
+
+  // Hide creator-only fields — irrelevant when joining someone else's room
+  ['lobby-piece-count-section', 'lobby-time-limit-section', 'lobby-image-section']
+    .forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
+
+  // Room is pre-filled, so land focus on name
+  $('inp-name').focus();
+})();
+
 /* ── Responsive scaling ── */
 function fitApp() {
   const scaleX = window.innerWidth / 1280;
@@ -393,7 +418,7 @@ function onLobbyInit({ playerId, roomCode: code, isCreator: creator, creatorId, 
     lobbyBound = true;
 
     $('waiting-copy-btn').addEventListener('click', () => {
-      navigator.clipboard?.writeText(roomCode).catch(() => {});
+      navigator.clipboard?.writeText(getRoomShareUrl(roomCode)).catch(() => {});
       $('waiting-copy-btn').textContent = 'copied!';
       setTimeout(() => { $('waiting-copy-btn').textContent = 'copy'; }, 1500);
     });
@@ -828,9 +853,9 @@ function setupEventListeners() {
     applyOverlay();
   });
 
-  // Copy room code
+  // Copy room share URL
   $('copy-btn').addEventListener('click', () => {
-    navigator.clipboard?.writeText(roomCode).catch(() => {});
+    navigator.clipboard?.writeText(getRoomShareUrl(roomCode)).catch(() => {});
     $('copy-btn').textContent = 'copied!';
     setTimeout(() => { $('copy-btn').textContent = 'copy'; }, 1500);
   });
@@ -910,6 +935,10 @@ function setupEventListeners() {
 }
 
 /* ── Utils ── */
+function getRoomShareUrl(code) {
+  return `${location.origin}${location.pathname}?roomCode=${encodeURIComponent(code)}`;
+}
+
 function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
