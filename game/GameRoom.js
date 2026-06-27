@@ -128,7 +128,7 @@ class GameRoom {
   getPlayerPublic(id) {
     const p = this.players.get(id);
     if (!p) return null;
-    return { id: p.id, name: p.name, color: p.color, score: p.score };
+    return { id: p.id, name: p.name, color: p.color, score: p.score, connected: p.connected };
   }
 
   getScores() {
@@ -189,7 +189,7 @@ class GameRoom {
 
   getState() {
     const players = [];
-    this.players.forEach(p => players.push({ id: p.id, name: p.name, color: p.color, score: p.score }));
+    this.players.forEach(p => players.push({ id: p.id, name: p.name, color: p.color, score: p.score, connected: p.connected }));
     const timerEndsAt = (this.timerDuration > 0 && this.startedAt != null)
       ? this.startedAt + this.timerDuration * 60 * 1000
       : null;

@@ -305,6 +305,21 @@ function joinGame() {
     }
   });
 
+  // Player dropped connection but keeps their score — show them as "away".
+  socket.on('player_disconnected', ({ playerId }) => {
+    const pl = players.find(p => p.id === playerId);
+    if (pl) pl.connected = false;
+    removeCursor(playerId);
+    renderLeaderboard();
+  });
+
+  // Player came back and reclaimed their record — un-dim them.
+  socket.on('player_reconnected', ({ playerId }) => {
+    const pl = players.find(p => p.id === playerId);
+    if (pl) pl.connected = true;
+    renderLeaderboard();
+  });
+
   socket.on('piece_picked', ({ pieceId, playerId }) => {
     const p = pieces.find(pc => pc.id === pieceId);
     if (p) p.heldBy = playerId;
@@ -640,15 +655,18 @@ function renderLeaderboard() {
   lbList.innerHTML = '';
   ranked.forEach((p, i) => {
     const isYou = p.id === myId;
+    const isAway = p.connected === false;
     const row = document.createElement('div');
-    row.className = 'lb-row' + (isYou ? ' you' : '');
+    row.className = 'lb-row' + (isYou ? ' you' : '') + (isAway ? ' away' : '');
+    if (isAway) row.style.opacity = '0.5';
+    const status = isAway ? 'away' : (isYou ? 'placing' : 'playing');
     row.innerHTML = `
       <div class="lb-left">
         <div class="lb-rank">${String(i + 1).padStart(2, '0')}</div>
         <div class="lb-dot" style="background:${p.color};${i === 0 ? `box-shadow:0 0 0 3px ${p.color}22` : ''}"></div>
         <div class="lb-meta">
           <div class="lb-name">${escHtml(p.name)}${isYou ? ' <span class="lb-you-tag">YOU</span>' : ''}</div>
-          <div class="lb-status">${isYou ? 'placing' : 'playing'}</div>
+          <div class="lb-status">${status}</div>
         </div>
       </div>
       <div class="lb-score">${p.score}</div>

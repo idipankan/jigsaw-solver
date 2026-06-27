@@ -13,43 +13,39 @@ app.use(express.static(path.join(__dirname, 'public')));
 // rooms keyed by roomCode
 const rooms = new Map();
 
-// Pending player removals during the in-game disconnect grace period,
-// keyed by `${roomCode}:${clientId}`. Lets a brief network drop recover
-// without wiping the player's score or kicking them from the room.
-const removalTimers = new Map();
-const DISCONNECT_GRACE_MS = 30_000;
+// Room garbage-collection timers, keyed by roomCode. A player's score is
+// NEVER erased on disconnect — it lives in the room for the whole game and is
+// reclaimed on reconnect. We only clean up a *room* once it has been fully
+// abandoned (every player disconnected) for ROOM_IDLE_MS.
+const roomIdleTimers = new Map();
+const ROOM_IDLE_MS = 5 * 60 * 1000;
 
 // Per-room authoritative game-over timers, keyed by roomCode. Guarantees
 // every client ends on the same final state regardless of local drift.
 const gameOverTimers = new Map();
 
-function cancelRemoval(roomCode, clientId) {
-  const key = `${roomCode}:${clientId}`;
-  const t = removalTimers.get(key);
-  if (t) { clearTimeout(t); removalTimers.delete(key); }
+function roomHasLiveConnection(room) {
+  for (const p of room.players.values()) if (p.connected) return true;
+  return false;
 }
 
-function scheduleRemoval(room, clientId) {
-  const key = `${room.code}:${clientId}`;
-  if (removalTimers.has(key)) clearTimeout(removalTimers.get(key));
+function cancelRoomGC(roomCode) {
+  const t = roomIdleTimers.get(roomCode);
+  if (t) { clearTimeout(t); roomIdleTimers.delete(roomCode); }
+}
+
+// Schedule deletion of a fully-abandoned room. Cancelled the moment anyone
+// (re)connects to it. Only the room lifecycle is on a timer — never a score.
+function scheduleRoomGC(room) {
+  cancelRoomGC(room.code);
   const t = setTimeout(() => {
-    removalTimers.delete(key);
-    if (!rooms.has(room.code)) return;
-    room.removePlayer(clientId);
-    io.to(room.code).emit('player_left', { playerId: clientId });
-    if (room.creatorId === clientId) {
-      const next = [...room.players.keys()][0];
-      if (next) {
-        room.creatorId = next;
-        io.to(room.code).emit('lobby_creator_changed', { creatorId: next });
-      }
-    }
-    if (room.isEmpty()) {
-      cancelGameOver(room.code);
-      rooms.delete(room.code);
-    }
-  }, DISCONNECT_GRACE_MS);
-  removalTimers.set(key, t);
+    roomIdleTimers.delete(room.code);
+    const r = rooms.get(room.code);
+    if (!r || roomHasLiveConnection(r)) return; // someone came back
+    cancelGameOver(r.code);
+    rooms.delete(r.code);
+  }, ROOM_IDLE_MS);
+  roomIdleTimers.set(room.code, t);
 }
 
 function cancelGameOver(roomCode) {
@@ -96,8 +92,8 @@ io.on('connection', (socket) => {
     // cancels any pending grace-period removal.
     let player = room.getPlayer(clientId);
     const reconnecting = !!player;
+    cancelRoomGC(room.code); // a live connection exists again
     if (reconnecting) {
-      cancelRemoval(room.code, clientId);
       player.socketId = socket.id;
       player.connected = true;
     } else {
@@ -128,7 +124,10 @@ io.on('connection', (socket) => {
         roomCode,
         state: room.getState(),
       });
-      if (!reconnecting) {
+      if (reconnecting) {
+        // Un-dim them on everyone else's leaderboard; score is intact.
+        socket.to(roomCode).emit('player_reconnected', { playerId: player.id });
+      } else {
         socket.to(roomCode).emit('player_joined', { player: room.getPlayerPublic(player.id) });
       }
     }
@@ -197,10 +196,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    if (!currentRoom || !currentPlayer) return;
+    if (!currentRoom || !currentClientId) return;
     const room = currentRoom;
     const clientId = currentClientId;
-    if (currentPlayer) currentPlayer.connected = false;
+
+    // If a newer connection already reclaimed this player (e.g. a fast
+    // refresh where the new join landed before this disconnect), the player's
+    // socketId no longer points at us — this is a stale disconnect, ignore it.
+    const player = room.getPlayer(clientId);
+    if (player && player.socketId !== socket.id) return;
+    if (player) player.connected = false;
 
     // Free any held piece immediately so it isn't locked for everyone else.
     const released = room.releaseHeldPiece(clientId);
@@ -211,7 +216,7 @@ io.on('connection', (socket) => {
     }
 
     if (!room.started) {
-      // Lobby: no score at stake — remove immediately as before.
+      // Lobby: nothing scored yet — remove immediately.
       room.removePlayer(clientId);
       io.to(room.code).emit('player_left', { playerId: clientId });
       if (room.creatorId === clientId) {
@@ -223,14 +228,19 @@ io.on('connection', (socket) => {
       }
       if (room.isEmpty()) {
         cancelGameOver(room.code);
+        cancelRoomGC(room.code);
         rooms.delete(room.code);
       }
       return;
     }
 
-    // In-game: keep the player (and their score) for a grace period so a
-    // transient network drop can reconnect and reclaim their identity.
-    scheduleRemoval(room, clientId);
+    // In-game: NEVER erase score. Keep the player record, mark them away, and
+    // show it on everyone's leaderboard. They reclaim it on reconnect no
+    // matter how long they're gone — as long as the room still exists.
+    io.to(room.code).emit('player_disconnected', { playerId: clientId });
+
+    // Only the room is on a cleanup timer, and only once fully abandoned.
+    if (!roomHasLiveConnection(room)) scheduleRoomGC(room);
   });
 });
 
