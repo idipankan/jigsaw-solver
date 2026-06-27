@@ -261,10 +261,11 @@ function joinGame() {
 
   // Authoritative end-of-game from the server — overrides any local drift
   // so every client shows the same final modal.
-  socket.on('game_over', ({ state }) => {
+  socket.on('game_over', ({ state, reason }) => {
     applyState(state);
     clearInterval(timerInterval);
-    showTimerWinner();
+    if (reason === 'complete') showCompleteModal();
+    else showTimerWinner();
   });
 
   // All lobby players receive this when creator starts the game
@@ -714,14 +715,16 @@ function updateSubbar() {
   const remaining = pieces.length - placed;
   const pct       = pieces.length > 0 ? Math.round((placed / pieces.length) * 100) : 0;
 
-  $('disp-player-count').textContent = players.length;
-  $('disp-progress').textContent = `${pct}% complete`;
-  $('disp-placed').textContent   = placed;
-  $('disp-remaining').textContent = remaining;
-  $('disp-tray-count').textContent = remaining;
-
-  const placedSpan = document.querySelector('.sub-right span:first-child');
-  if (placedSpan) placedSpan.innerHTML = `<span class="val">${placed}</span>/${pieces.length} placed`;
+  // Update each stat via textContent only. (Never innerHTML here — rewriting
+  // the parent span would delete the #disp-placed / #disp-total nodes and make
+  // every subsequent call throw, freezing the bar and aborting checkWin.)
+  const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+  set('disp-player-count', players.length);
+  set('disp-progress', `${pct}% complete`);
+  set('disp-placed', placed);
+  set('disp-total', pieces.length);
+  set('disp-remaining', remaining);
+  set('disp-tray-count', remaining);
 }
 
 /* ── Timer ── */
@@ -751,36 +754,38 @@ function startTimer(timerEndsAt) {
 
 /* ── Win check ── */
 function checkWin() {
-  if (pieces.length > 0 && pieces.every(p => p.placed)) {
-    clearInterval(timerInterval);
+  if (pieces.length > 0 && pieces.every(p => p.placed)) showCompleteModal();
+}
 
-    const ranked = [...players].sort((a, b) => b.score - a.score);
-    const winner = ranked[0];
+function showCompleteModal() {
+  clearInterval(timerInterval);
 
-    let timeLine = '';
-    if (currentTimerEndsAt) {
-      const msLeft = Math.max(0, currentTimerEndsAt - Date.now());
-      const secsLeft = Math.floor(msLeft / 1000);
-      const m = Math.floor(secsLeft / 60);
-      const s = secsLeft % 60;
-      timeLine = ` · ${m}:${String(s).padStart(2, '0')} to spare`;
-    }
+  const ranked = [...players].sort((a, b) => b.score - a.score);
+  const winner = ranked[0];
 
-    $('win-title').textContent = 'puzzle complete!';
-
-    if (!winner || winner.score === 0) {
-      $('win-sub').textContent = `all ${pieces.length} pieces placed${timeLine}`;
-    } else {
-      const tied = ranked.filter(p => p.score === winner.score);
-      if (tied.length > 1) {
-        $('win-sub').textContent = `all ${pieces.length} placed${timeLine} · tie: ${tied.map(p => escHtml(p.name)).join(' & ')}`;
-      } else {
-        $('win-sub').textContent = `all ${pieces.length} placed${timeLine} · winner: ${escHtml(winner.name)} (${winner.score} pieces)`;
-      }
-    }
-
-    winBanner.classList.add('open');
+  let timeLine = '';
+  if (currentTimerEndsAt) {
+    const msLeft = Math.max(0, currentTimerEndsAt - Date.now());
+    const secsLeft = Math.floor(msLeft / 1000);
+    const m = Math.floor(secsLeft / 60);
+    const s = secsLeft % 60;
+    timeLine = ` · ${m}:${String(s).padStart(2, '0')} to spare`;
   }
+
+  $('win-title').textContent = 'puzzle complete!';
+
+  if (!winner || winner.score === 0) {
+    $('win-sub').textContent = `all ${pieces.length} pieces placed${timeLine}`;
+  } else {
+    const tied = ranked.filter(p => p.score === winner.score);
+    if (tied.length > 1) {
+      $('win-sub').textContent = `all ${pieces.length} placed${timeLine} · tie: ${tied.map(p => escHtml(p.name)).join(' & ')}`;
+    } else {
+      $('win-sub').textContent = `all ${pieces.length} placed${timeLine} · winner: ${escHtml(winner.name)} (${winner.score} pieces)`;
+    }
+  }
+
+  winBanner.classList.add('open');
 }
 
 function showTimerWinner() {

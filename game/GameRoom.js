@@ -125,6 +125,10 @@ class GameRoom {
     return this.players.size === 0;
   }
 
+  isComplete() {
+    return this.pieces.length > 0 && this.pieces.every(p => p.placed);
+  }
+
   getPlayerPublic(id) {
     const p = this.players.get(id);
     if (!p) return null;

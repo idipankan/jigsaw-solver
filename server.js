@@ -62,7 +62,7 @@ function scheduleGameOver(room) {
   const t = setTimeout(() => {
     gameOverTimers.delete(room.code);
     if (!rooms.has(room.code)) return;
-    io.to(room.code).emit('game_over', { state: room.getState(), scores: room.getScores() });
+    io.to(room.code).emit('game_over', { state: room.getState(), scores: room.getScores(), reason: 'timeout' });
   }, Math.max(0, ms));
   gameOverTimers.set(room.code, t);
 }
@@ -165,6 +165,15 @@ io.on('connection', (socket) => {
         playerName: currentPlayer.name,
         scores: currentRoom.getScores(),
       });
+      // Authoritative completion: the server decides the puzzle is done and
+      // broadcasts one final state, so every client shows the same modal even
+      // if a client's local win-check was missed (e.g. mid-reconnect).
+      if (currentRoom.isComplete()) {
+        cancelGameOver(currentRoom.code);
+        io.to(currentRoom.code).emit('game_over', {
+          state: currentRoom.getState(), scores: currentRoom.getScores(), reason: 'complete',
+        });
+      }
     } else {
       io.to(currentRoom.code).emit('piece_dropped', { pieceId, x: result.x, y: result.y, playerId: currentPlayer.id });
     }
