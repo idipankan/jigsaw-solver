@@ -7,7 +7,14 @@ const TRAY_TOP = 60;
 const TRAY_W = 344;
 const TRAY_H = 560;
 
-/* ── Default image pool (15 abstract compositions) ── */
+/* ── Default image pool (15 abstract compositions) ──
+   Design rule: every ~50px cell must be visually unique so a human can tell
+   which slot a piece belongs to. The server validates pieces by exact slot,
+   so large flat color regions (which look identical across many cells) make
+   the puzzle unsolvable by eye. Each image therefore uses a full-canvas
+   gradient (color shifts continuously with position) plus a scattered accent
+   layer (local detail that distinguishes neighboring cells). No large flat
+   fills, and no big single-color blocks. */
 const SVG_POOL = [
   /* 1 — Bauhaus circles */
   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'>
@@ -427,7 +434,7 @@ function joinGame() {
       p.x = BOARD_LEFT + p.col * PSZ;
       p.y = BOARD_TOP  + p.row * PSZ;
     }
-    Object.entries(scores).forEach(([id, score]) => {
+    if (scores) Object.entries(scores).forEach(([id, score]) => {
       const pl = players.find(pp => pp.id === id);
       if (pl) pl.score = score;
     });
@@ -771,11 +778,34 @@ function startTimer(timerEndsAt) {
 /* ── Win check ── */
 function checkWin() {
   if (pieces.length > 0 && pieces.every(p => p.placed)) {
-    const winner = [...players].sort((a, b) => b.score - a.score)[0];
-    $('win-title').textContent = 'puzzle complete!';
-    $('win-sub').textContent = `all ${pieces.length} pieces placed · winner: ${winner?.name || '—'}`;
-    winBanner.classList.add('open');
     clearInterval(timerInterval);
+
+    const ranked = [...players].sort((a, b) => b.score - a.score);
+    const winner = ranked[0];
+
+    let timeLine = '';
+    if (currentTimerEndsAt) {
+      const msLeft = Math.max(0, currentTimerEndsAt - Date.now());
+      const secsLeft = Math.floor(msLeft / 1000);
+      const m = Math.floor(secsLeft / 60);
+      const s = secsLeft % 60;
+      timeLine = ` · ${m}:${String(s).padStart(2, '0')} to spare`;
+    }
+
+    $('win-title').textContent = 'puzzle complete!';
+
+    if (!winner || winner.score === 0) {
+      $('win-sub').textContent = `all ${pieces.length} pieces placed${timeLine}`;
+    } else {
+      const tied = ranked.filter(p => p.score === winner.score);
+      if (tied.length > 1) {
+        $('win-sub').textContent = `all ${pieces.length} placed${timeLine} · tie: ${tied.map(p => escHtml(p.name)).join(' & ')}`;
+      } else {
+        $('win-sub').textContent = `all ${pieces.length} placed${timeLine} · winner: ${escHtml(winner.name)} (${winner.score} pieces)`;
+      }
+    }
+
+    winBanner.classList.add('open');
   }
 }
 
