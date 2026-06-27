@@ -2,33 +2,54 @@
 
 Real-time multiplayer jigsaw puzzle game. Players share a room, drag pieces from a tray onto a board, and race to complete the puzzle.
 
-**Docker Hub:** `dipankan001/jigsaw-solver:v2`
+**Docker Hub:** `dipankan001/jigsaw-solver:v5`
 
 ---
 
 ## Architecture
 
 ```mermaid
-graph LR
-    Players["🧩 Players (browsers)"] -->|actions| Server["Node.js Server"]
-    Server -->|state updates| Players
-    Server --- Rooms["Game Rooms\n(in-memory)"]
+graph TD
+    subgraph Browsers["Browsers · one tab per player"]
+        CL["app.js — Socket.IO client"]
+    end
+
+    subgraph Server["Node.js Server :3001"]
+        EX["Express — serves /public"]
+        SIO["Socket.IO — event router"]
+        RM["rooms — Map(code → GameRoom)"]
+        GC["GC timers — roomIdleTimers · gameOverTimers"]
+    end
+
+    subgraph GR["GameRoom · one per room"]
+        ST["pieces[] · players Map · timerEndsAt"]
+    end
+
+    CL -->|"HTTP — initial page load"| EX
+    CL -->|"WS — join · pick · move · drop · cursor"| SIO
+    SIO -->|"state broadcasts"| CL
+    SIO --> RM
+    RM --> GR
+    GC -. "room cleanup / game_over broadcast" .-> RM
 ```
 
 - Server is the single source of truth — clients send intent (`pick`, `move`, `drop`), server validates and broadcasts.
-- Rooms are created on first join and deleted when the last player disconnects.
+- Rooms are created on first join and deleted when the last player disconnects (with a 5-minute grace period for reconnects).
 - Timer is issued as an absolute `timerEndsAt` timestamp so all players stay in sync regardless of join time.
+- An authoritative `game_over` event is fired server-side at the deadline, preventing client clock drift from causing split outcomes.
 
 ---
 
 ## Features
 
-- **Multiplayer** — 20+ players per room, each with a unique color, live cursor, and score
-- **Room codes** — join an existing room or auto-generate a new one
+- **Multiplayer** — up to 20 players per room, each with a unique color, live cursor, and score
+- **Room sharing via URL** — copy button shares a direct join link (`?roomCode=XYZ`); opening it lands you on a pre-filled lobby with just a name field
+- **Lobby + waiting room** — players queue in a waiting room before the creator starts; creator role passes automatically if the host leaves
 - **Puzzle config** — piece count (64–256), time limit (5–30 min or ∞), and starting image set at room creation
 - **Custom images** — any JPEG/PNG/WebP/SVG URL; changeable mid-game, synced to all players
 - **Board overlay** — ghost image behind the grid as a solving aid; toggled per-user, persisted in `localStorage`
-- **Leaderboard + feed** — live scores ranked by pieces placed; last five placements in a activity feed
+- **Leaderboard + feed** — live scores ranked by pieces placed; last five placements in an activity feed
+- **Reconnect resilience** — players who drop reconnect to their score and color; leaderboard shows them as "away" in the meantime; held pieces are released immediately on disconnect
 - **Responsive** — scales to any viewport via CSS `transform: scale()`, no layout rewrite
 
 ---
