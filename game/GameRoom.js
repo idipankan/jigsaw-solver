@@ -25,6 +25,7 @@ class GameRoom {
     this.N = Math.round(Math.sqrt(pieceCount));
     this.pieceCount = this.N * this.N;
     this.imageUrl = null; // null = default built-in SVG
+    this.svgIndex = Math.floor(Math.random() * 256); // index into client SVG_POOL; shared so all clients render the same default
     this.timerDuration = timerDuration; // minutes; 0 = no limit
     this.started = false;
     this.startedAt = null;
@@ -180,6 +181,7 @@ class GameRoom {
       pieces: this.pieces.map(p => ({ ...p })),
       players,
       imageUrl: this.imageUrl,
+      svgIndex: this.svgIndex,
       timerDuration: this.timerDuration,
       timerEndsAt,
     };

@@ -80,14 +80,17 @@ const SVG_POOL = [
   </svg>`
 ];
 
-const RAW_SVG = SVG_POOL[Math.floor(Math.random() * SVG_POOL.length)];
-const DEFAULT_IMG_URL = `data:image/svg+xml;utf8,${encodeURIComponent(RAW_SVG)}`;
+let svgIndex = 0; // set from server state so every client in the room uses the same SVG
+function defaultImgUrl() {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(SVG_POOL[svgIndex % SVG_POOL.length])}`;
+}
 
 /* ── State ── */
 let socket;
 let myId = null;
 let appScale = 1;
-let currentImgUrl = DEFAULT_IMG_URL;
+let currentImgUrl = defaultImgUrl();
+let isDefaultImage = true;
 let roomCode = null;
 let N = 10;
 let pieceCount = 100;
@@ -134,11 +137,11 @@ window.addEventListener('resize', fitApp);
 
 /* ── Image helpers ── */
 function setImage(url) {
-  currentImgUrl = url || DEFAULT_IMG_URL;
-  const isDefault = currentImgUrl === DEFAULT_IMG_URL;
+  isDefaultImage = !url;
+  currentImgUrl = url || defaultImgUrl();
 
-  $('img-url-text').textContent = isDefault
-    ? 'data:image/svg+xml — composition no. 7'
+  $('img-url-text').textContent = isDefaultImage
+    ? 'data:image/svg+xml — default pattern'
     : currentImgUrl;
   $('img-url-status').textContent = '● loaded';
 
@@ -356,10 +359,12 @@ function applyState(state) {
   players = state.players;
 
   // apply image from room state (for players joining mid-game)
+  if (state.svgIndex !== undefined) svgIndex = state.svgIndex;
+  isDefaultImage = !state.imageUrl;
   if (state.imageUrl) {
     currentImgUrl = state.imageUrl;
   } else {
-    currentImgUrl = DEFAULT_IMG_URL;
+    currentImgUrl = defaultImgUrl();
   }
 
   buildPiecesDOM();
@@ -373,8 +378,8 @@ function applyState(state) {
 
   // sync reference modal image
   refImg.src = currentImgUrl;
-  $('img-url-text').textContent = currentImgUrl === DEFAULT_IMG_URL
-    ? 'data:image/svg+xml — composition no. 7'
+  $('img-url-text').textContent = isDefaultImage
+    ? 'data:image/svg+xml — default pattern'
     : currentImgUrl;
 }
 
@@ -747,7 +752,7 @@ function setupEventListeners() {
     const isOpen = popover.classList.contains('open');
     popover.classList.toggle('open', !isOpen);
     if (!isOpen) {
-      urlInput.value = currentImgUrl === DEFAULT_IMG_URL ? '' : currentImgUrl;
+      urlInput.value = isDefaultImage ? '' : currentImgUrl;
       urlInput.focus();
       urlInput.select();
     }
