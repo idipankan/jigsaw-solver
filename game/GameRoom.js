@@ -7,14 +7,20 @@ const PLAYER_COLORS = [
   '#4D7C0F', '#BE123C',
 ];
 
-const TRAY_LEFT = 584 + 24;
 const TRAY_TOP = 60;
-const TRAY_W = 344;
 const TRAY_H = 560;
 const BOARD_LEFT = 30;
 const BOARD_TOP = 60;
-const PSZ = 50;
-const SNAP_DIST = 38;
+
+// PSZ shrinks so the board always fits in the fixed 500px board-grid.
+// TRAY_LEFT/TRAY_W are derived so they stay consistent across server and client.
+function pieceSize(N) { return Math.floor(500 / N); }
+function snapDist(psz) { return Math.round(psz * 0.76); }
+// Stage width is 1136px (1440px canvas − 280px left sidebar − 24px right margin).
+// board-container = N*psz + 60 (30px pad each side).
+// gap between containers = 24px. tray-container padding = 24px.
+function trayLeft(N, psz)  { return N * psz + 108; }   // BOARD_LEFT(30)+board(N*psz)+pad(30)+gap(24)+trayPad(24)
+function trayWidth(N, psz) { return 1004 - N * psz; }  // 1136 − trayContainerLeft(N*psz+84) − trayPad×2(48)
 
 class GameRoom {
   constructor(code, pieceCount = 100, timerDuration = 10) {
@@ -24,6 +30,7 @@ class GameRoom {
     this.pieces = [];
     this.N = Math.round(Math.sqrt(pieceCount));
     this.pieceCount = this.N * this.N;
+    this._recomputeLayout();
     this.imageUrl = null; // null = default built-in SVG
     this.svgIndex = Math.floor(Math.random() * 256); // index into client SVG_POOL; shared so all clients render the same default
     this.timerDuration = timerDuration; // minutes; 0 = no limit
@@ -33,14 +40,22 @@ class GameRoom {
     this.createdAt = Date.now();
   }
 
+  _recomputeLayout() {
+    this.PSZ       = pieceSize(this.N);
+    this.SNAP_DIST = snapDist(this.PSZ);
+    this.TRAY_LEFT = trayLeft(this.N, this.PSZ);
+    this.TRAY_W    = trayWidth(this.N, this.PSZ);
+  }
+
   _buildPieces() {
     this.pieces = [];
     const pad = 12;
+    const { PSZ, TRAY_LEFT, TRAY_W } = this;
     for (let r = 0; r < this.N; r++) {
       for (let c = 0; c < this.N; c++) {
         const id = r * this.N + c;
         const x = TRAY_LEFT + pad + Math.random() * (TRAY_W - PSZ - pad * 2);
-        const y = TRAY_TOP + pad + Math.random() * (TRAY_H - PSZ - pad * 2);
+        const y = TRAY_TOP  + pad + Math.random() * (TRAY_H - PSZ - pad * 2);
         this.pieces.push({ id, row: r, col: c, x, y, placed: false, heldBy: null, placedBy: null });
       }
     }
@@ -60,6 +75,7 @@ class GameRoom {
   reset(pieceCount) {
     this.N = Math.round(Math.sqrt(pieceCount));
     this.pieceCount = this.N * this.N;
+    this._recomputeLayout();
     this.players.forEach(p => { p.score = 0; p.holdingId = null; });
     this.startedAt = Date.now();
     this._buildPieces();
@@ -67,12 +83,13 @@ class GameRoom {
 
   scramble() {
     const pad = 12;
+    const { PSZ, TRAY_LEFT, TRAY_W } = this;
     this.pieces.forEach(p => {
       p.placed = false;
       p.heldBy = null;
       p.placedBy = null;
       p.x = TRAY_LEFT + pad + Math.random() * (TRAY_W - PSZ - pad * 2);
-      p.y = TRAY_TOP + pad + Math.random() * (TRAY_H - PSZ - pad * 2);
+      p.y = TRAY_TOP  + pad + Math.random() * (TRAY_H - PSZ - pad * 2);
     });
     this.players.forEach(p => { p.score = 0; p.holdingId = null; });
     this.startedAt = Date.now();
@@ -168,21 +185,22 @@ class GameRoom {
     piece.heldBy = null;
     player.holdingId = null;
 
+    const { PSZ, SNAP_DIST, TRAY_LEFT, TRAY_W } = this;
     const targetX = BOARD_LEFT + piece.col * PSZ + PSZ / 2;
-    const targetY = BOARD_TOP + piece.row * PSZ + PSZ / 2;
+    const targetY = BOARD_TOP  + piece.row * PSZ + PSZ / 2;
     const dist = Math.hypot(x - targetX, y - targetY);
 
     if (dist < SNAP_DIST) {
       piece.placed = true;
       piece.placedBy = playerId;
       piece.x = BOARD_LEFT + piece.col * PSZ;
-      piece.y = BOARD_TOP + piece.row * PSZ;
+      piece.y = BOARD_TOP  + piece.row * PSZ;
       player.score += 1;
       return { placed: true };
     } else {
       // x,y are center coords; convert to top-left before clamping
       piece.x = Math.max(TRAY_LEFT + 4, Math.min(TRAY_LEFT + TRAY_W - PSZ - 4, x - PSZ / 2));
-      piece.y = Math.max(TRAY_TOP + 4, Math.min(TRAY_TOP + TRAY_H - PSZ - 4, y - PSZ / 2));
+      piece.y = Math.max(TRAY_TOP  + 4, Math.min(TRAY_TOP  + TRAY_H - PSZ - 4, y - PSZ / 2));
       return { placed: false, x: piece.x, y: piece.y };
     }
   }
@@ -199,6 +217,7 @@ class GameRoom {
       : null;
     return {
       N: this.N,
+      psz: this.PSZ,
       pieceCount: this.pieceCount,
       pieces: this.pieces.map(p => ({ ...p })),
       players,

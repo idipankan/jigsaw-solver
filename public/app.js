@@ -1,11 +1,10 @@
 /* ── Constants matching server geometry ── */
-const PSZ = 50;
+let PSZ = 50;       // updated dynamically from N via applyState
 const BOARD_LEFT = 30;
-const BOARD_TOP = 60;
-const TRAY_LEFT = 584 + 24;
-const TRAY_TOP = 60;
-const TRAY_W = 344;
-const TRAY_H = 560;
+const BOARD_TOP  = 60;
+const TRAY_TOP   = 60;
+const TRAY_H     = 560;
+const STAGE_W    = 1136; // 1440px canvas − 280px sidebar − 24px right margin
 
 /* ── Default image pool (15 abstract compositions) ──
    Design rule: every ~50px cell must be visually unique so a human can tell
@@ -189,12 +188,10 @@ const winBanner = $('win-banner');
 
 /* ── Responsive scaling ── */
 function fitApp() {
-  const scaleX = window.innerWidth / 1280;
-  const scaleY = window.innerHeight / 800;
-  appScale = Math.min(scaleX, scaleY);
+  appScale = window.innerWidth / 1440;
   app.style.transform = `scale(${appScale})`;
-  app.style.left = Math.max(0, (window.innerWidth  - 1280 * appScale) / 2) + 'px';
-  app.style.top  = Math.max(0, (window.innerHeight - 800  * appScale) / 2) + 'px';
+  app.style.left = '0px';
+  app.style.top  = Math.max(0, (window.innerHeight - 800 * appScale) / 2) + 'px';
 }
 window.addEventListener('resize', fitApp);
 
@@ -469,9 +466,21 @@ function resyncState(state) {
 
 function applyState(state) {
   N = state.N;
+  PSZ = state.psz ?? Math.floor(500 / N);
   pieceCount = state.pieceCount;
   pieces = state.pieces;
   players = state.players;
+
+  // Resize board and tray containers to match piece size for this puzzle
+  const boardPx = N * PSZ;
+  boardGrid.style.width  = boardPx + 'px';
+  boardGrid.style.height = boardPx + 'px';
+  $('board-container').style.width = (boardPx + 60) + 'px';
+  const trayContainerLeft = boardPx + 84;
+  const trayContainerW    = STAGE_W - trayContainerLeft;
+  $('tray-container').style.left  = trayContainerLeft + 'px';
+  $('tray-container').style.width = trayContainerW + 'px';
+  $('tray-area').style.width      = (trayContainerW - 48) + 'px';
 
   // apply image from room state (for players joining mid-game)
   if (state.svgIndex !== undefined) svgIndex = state.svgIndex;
