@@ -7,20 +7,17 @@ const PLAYER_COLORS = [
   '#4D7C0F', '#BE123C',
 ];
 
-const TRAY_TOP = 60;
-const TRAY_H = 560;
+const TRAY_LEFT = 584 + 24;  // tray-container left(584) + tray-container padding(24)
+const TRAY_TOP  = 60;
+const TRAY_W    = 344;
+const TRAY_H    = 560;
 const BOARD_LEFT = 30;
-const BOARD_TOP = 60;
+const BOARD_TOP  = 60;
 
-// PSZ shrinks so the board always fits in the fixed 500px board-grid.
-// TRAY_LEFT/TRAY_W are derived so they stay consistent across server and client.
+// PSZ shrinks for larger grids so the board always fits in the 500px board-grid area.
+// TRAY_LEFT/TRAY_W stay fixed — the board shrinks/grows to the left of the tray.
 function pieceSize(N) { return Math.floor(500 / N); }
 function snapDist(psz) { return Math.round(psz * 0.76); }
-// Stage width is 1136px (1440px canvas − 280px left sidebar − 24px right margin).
-// board-container = N*psz + 60 (30px pad each side).
-// gap between containers = 24px. tray-container padding = 24px.
-function trayLeft(N, psz)  { return N * psz + 108; }   // BOARD_LEFT(30)+board(N*psz)+pad(30)+gap(24)+trayPad(24)
-function trayWidth(N, psz) { return 1004 - N * psz; }  // 1136 − trayContainerLeft(N*psz+84) − trayPad×2(48)
 
 class GameRoom {
   constructor(code, pieceCount = 100, timerDuration = 10) {
@@ -43,14 +40,12 @@ class GameRoom {
   _recomputeLayout() {
     this.PSZ       = pieceSize(this.N);
     this.SNAP_DIST = snapDist(this.PSZ);
-    this.TRAY_LEFT = trayLeft(this.N, this.PSZ);
-    this.TRAY_W    = trayWidth(this.N, this.PSZ);
   }
 
   _buildPieces() {
     this.pieces = [];
     const pad = 12;
-    const { PSZ, TRAY_LEFT, TRAY_W } = this;
+    const { PSZ } = this;
     for (let r = 0; r < this.N; r++) {
       for (let c = 0; c < this.N; c++) {
         const id = r * this.N + c;
@@ -83,7 +78,7 @@ class GameRoom {
 
   scramble() {
     const pad = 12;
-    const { PSZ, TRAY_LEFT, TRAY_W } = this;
+    const { PSZ } = this;
     this.pieces.forEach(p => {
       p.placed = false;
       p.heldBy = null;
@@ -185,7 +180,7 @@ class GameRoom {
     piece.heldBy = null;
     player.holdingId = null;
 
-    const { PSZ, SNAP_DIST, TRAY_LEFT, TRAY_W } = this;
+    const { PSZ, SNAP_DIST } = this;
     const targetX = BOARD_LEFT + piece.col * PSZ + PSZ / 2;
     const targetY = BOARD_TOP  + piece.row * PSZ + PSZ / 2;
     const dist = Math.hypot(x - targetX, y - targetY);

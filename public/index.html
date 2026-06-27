@@ -25,7 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1a1a1a; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #F4F2EC; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1a1a1a; }
 
 @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
 @keyframes pop { 0%{transform:scale(.8);opacity:0} 60%{transform:scale(1.05);opacity:1} 100%{transform:scale(1);opacity:1} }
@@ -193,7 +193,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; f
 
 /* ── Sub-bar ── */
 #subbar {
-  position: absolute; left: 24px; top: 80px; right: 24px;
+  /* right edge aligns with the tray panel's right edge (stage 280 + tray 584 + 392 = 1256;
+     1440 − 1256 = 184) so the "remaining" text lines up with the content block, not the dead
+     space left of the canvas's right margin. */
+  position: absolute; left: 24px; top: 80px; right: 184px;
   display: flex; justify-content: space-between; align-items: center;
 }
 .sub-left { font: 300 11px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; }
@@ -267,13 +270,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; f
 
 /* ── Tray ── */
 #tray-container {
-  position: absolute; left: 584px; top: 0; width: 552px; height: 640px;
+  position: absolute; left: 584px; top: 0; width: 392px; height: 640px;
   background: #fff; border: 1px solid #E5E2D9; border-radius: 4px; padding: 24px;
 }
 .tray-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .tray-title { font: 500 10px 'IBM Plex Mono', monospace; color: #6b6b6b; text-transform: uppercase; letter-spacing: .12em; }
 .tray-count { font: 400 10px 'IBM Plex Mono', monospace; color: #9a9a9a; }
-#tray-area { position: relative; width: 504px; height: 560px; background: #FBFAF6; border: 1px solid #EDE9DC; overflow: hidden; }
+#tray-area { position: relative; width: 344px; height: 560px; background: #FBFAF6; border: 1px solid #EDE9DC; overflow: hidden; }
 
 /* ── Pieces layer ── */
 #pieces-layer { position: absolute; inset: 0; pointer-events: none; }
