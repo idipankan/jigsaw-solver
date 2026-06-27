@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
+const sharp = require('sharp');
 const { GameRoom } = require('./game/GameRoom');
 
 const app = express();
@@ -254,6 +256,25 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Convert og-image.svg → og-image.png once at startup so link-preview crawlers
+// (LinkedIn, WhatsApp, iMessage, etc.) receive a raster image — SVG is widely
+// rejected by Open Graph consumers.
+(async () => {
+  const svgPath = path.join(__dirname, 'public', 'og-image.svg');
+  const pngPath = path.join(__dirname, 'public', 'og-image.png');
+  try {
+    const svgMtime = fs.statSync(svgPath).mtimeMs;
+    const pngMtime = fs.existsSync(pngPath) ? fs.statSync(pngPath).mtimeMs : 0;
+    if (pngMtime < svgMtime) {
+      await sharp(svgPath).resize(1200, 630).png().toFile(pngPath);
+      console.log('og-image.png generated');
+    }
+  } catch (err) {
+    console.warn('og-image.png generation skipped:', err.message);
+  }
+})();
+
 server.listen(PORT, () => {
   console.log(`Jigsaw Solver server running → http://localhost:${PORT}`);
 });
