@@ -55,10 +55,10 @@ npm run dev                     # hot-reload via node --watch
 
 ### Docker
 ```bash
-docker run -d -p 3001:3001 dipankan001/jigsaw-solver:v2
+docker run -d -p 3001:3001 dipankan001/jigsaw-solver:v5
 
 # custom port
-docker run -d -p 8080:8080 -e PORT=8080 dipankan001/jigsaw-solver:v2
+docker run -d -p 8080:8080 -e PORT=8080 dipankan001/jigsaw-solver:v5
 ```
 
 ### Cloud
