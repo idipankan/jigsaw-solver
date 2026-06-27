@@ -26,7 +26,8 @@ class GameRoom {
     this.pieceCount = this.N * this.N;
     this.imageUrl = null; // null = default built-in SVG
     this.timerDuration = timerDuration; // minutes; 0 = no limit
-    this.startedAt = Date.now();
+    this.started = false;
+    this.startedAt = null;
     this._buildPieces();
     this.createdAt = Date.now();
   }
@@ -42,6 +43,17 @@ class GameRoom {
         this.pieces.push({ id, row: r, col: c, x, y, placed: false, heldBy: null, placedBy: null });
       }
     }
+  }
+
+  start() {
+    this.started = true;
+    this.startedAt = Date.now();
+  }
+
+  getLobbyPlayers() {
+    const out = [];
+    this.players.forEach(p => out.push({ id: p.id, name: p.name, color: p.color }));
+    return out;
   }
 
   reset(pieceCount) {
@@ -159,7 +171,7 @@ class GameRoom {
   getState() {
     const players = [];
     this.players.forEach(p => players.push({ id: p.id, name: p.name, color: p.color, score: p.score }));
-    const timerEndsAt = this.timerDuration > 0
+    const timerEndsAt = (this.timerDuration > 0 && this.startedAt != null)
       ? this.startedAt + this.timerDuration * 60 * 1000
       : null;
     return {

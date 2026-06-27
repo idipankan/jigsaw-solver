@@ -27,20 +27,41 @@ io.on('connection', (socket) => {
   let currentPlayer = null;
 
   socket.on('join', ({ roomCode, playerName, pieceCount, timerDuration, imageUrl }) => {
+    const isNewRoom = !rooms.has(roomCode);
     const room = getOrCreateRoom(roomCode, pieceCount, timerDuration, imageUrl);
+    if (isNewRoom) room.creatorId = socket.id;
+
     const player = room.addPlayer(socket.id, playerName || 'anon');
     currentRoom = room;
     currentPlayer = player;
-
     socket.join(roomCode);
-    // Send full state to joining player
-    socket.emit('init', {
-      playerId: player.id,
-      roomCode,
-      state: room.getState(),
-    });
-    // Notify others
-    socket.to(roomCode).emit('player_joined', { player: room.getPlayerPublic(player.id) });
+
+    if (!room.started) {
+      // Room in lobby — send waiting room state
+      socket.emit('lobby_init', {
+        playerId: player.id,
+        roomCode,
+        isCreator: socket.id === room.creatorId,
+        creatorId: room.creatorId,
+        players: room.getLobbyPlayers(),
+      });
+      socket.to(roomCode).emit('lobby_player_joined', { player: room.getPlayerPublic(player.id) });
+    } else {
+      // Game already started — join mid-game
+      socket.emit('init', {
+        playerId: player.id,
+        roomCode,
+        state: room.getState(),
+      });
+      socket.to(roomCode).emit('player_joined', { player: room.getPlayerPublic(player.id) });
+    }
+  });
+
+  socket.on('start_game', () => {
+    if (!currentRoom || !currentPlayer) return;
+    if (currentRoom.started || currentRoom.creatorId !== currentPlayer.id) return;
+    currentRoom.start();
+    io.to(currentRoom.code).emit('game_started', { state: currentRoom.getState() });
   });
 
   socket.on('pick', ({ pieceId }) => {
@@ -99,6 +120,16 @@ io.on('connection', (socket) => {
     if (!currentRoom || !currentPlayer) return;
     currentRoom.removePlayer(currentPlayer.id);
     io.to(currentRoom.code).emit('player_left', { playerId: currentPlayer.id });
+
+    // If creator left while still in lobby, transfer creator role
+    if (!currentRoom.started && currentRoom.creatorId === currentPlayer.id) {
+      const next = [...currentRoom.players.keys()][0];
+      if (next) {
+        currentRoom.creatorId = next;
+        io.to(currentRoom.code).emit('lobby_creator_changed', { creatorId: next });
+      }
+    }
+
     if (currentRoom.isEmpty()) {
       rooms.delete(currentRoom.code);
     }

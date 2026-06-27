@@ -103,10 +103,14 @@ let feedItems = [];
 let feedTimers = {};
 let selectedPieceCount = 100;
 let selectedTimerMins = 10;
+let isCreator = false;
+let lobbyPlayers = [];
+let lobbyCreatorId = null;
 
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
 const lobby = $('lobby');
+const waitingRoom = $('waiting-room');
 const app = $('app');
 const stage = $('stage');
 const piecesLayer = $('pieces-layer');
@@ -190,7 +194,35 @@ function joinGame() {
   socket = io();
   socket.emit('join', { roomCode: room, playerName: name, pieceCount: selectedPieceCount, timerDuration: selectedTimerMins, imageUrl });
 
-  socket.on('init', onInit);
+  // Lobby path: room not yet started
+  socket.on('lobby_init', onLobbyInit);
+
+  // Mid-game join path: room already started
+  socket.on('init', ({ playerId, roomCode: code, state }) => {
+    myId = playerId;
+    roomCode = code;
+    enterGame(state);
+  });
+
+  // All lobby players receive this when creator starts the game
+  socket.on('game_started', ({ state }) => {
+    enterGame(state);
+  });
+
+  socket.on('lobby_player_joined', ({ player }) => {
+    lobbyPlayers = [...lobbyPlayers.filter(p => p.id !== player.id), player];
+    renderWaitingPlayers();
+  });
+
+  socket.on('lobby_creator_changed', ({ creatorId }) => {
+    lobbyCreatorId = creatorId;
+    if (creatorId === myId) {
+      isCreator = true;
+      $('start-game-btn').style.display = 'block';
+      $('waiting-for-host').style.display = 'none';
+    }
+    renderWaitingPlayers();
+  });
 
   socket.on('player_joined', ({ player }) => {
     players = [...players.filter(p => p.id !== player.id), player];
@@ -199,10 +231,15 @@ function joinGame() {
   });
 
   socket.on('player_left', ({ playerId }) => {
-    players = players.filter(p => p.id !== playerId);
-    removeCursor(playerId);
-    renderLeaderboard();
-    updateSubbar();
+    if (waitingRoom.classList.contains('open')) {
+      lobbyPlayers = lobbyPlayers.filter(p => p.id !== playerId);
+      renderWaitingPlayers();
+    } else {
+      players = players.filter(p => p.id !== playerId);
+      removeCursor(playerId);
+      renderLeaderboard();
+      updateSubbar();
+    }
   });
 
   socket.on('piece_picked', ({ pieceId, playerId }) => {
@@ -256,13 +293,57 @@ function joinGame() {
   });
 }
 
-function onInit({ playerId, roomCode: code, state }) {
+function onLobbyInit({ playerId, roomCode: code, isCreator: creator, creatorId, players: initialPlayers }) {
   myId = playerId;
   roomCode = code;
+  isCreator = creator;
+  lobbyCreatorId = creatorId;
+  lobbyPlayers = initialPlayers;
+
+  lobby.style.display = 'none';
+  waitingRoom.classList.add('open');
+
+  $('waiting-code').textContent = code;
+  $('start-game-btn').style.display = isCreator ? 'block' : 'none';
+  $('waiting-for-host').style.display = isCreator ? 'none' : 'block';
+
+  renderWaitingPlayers();
+
+  $('waiting-copy-btn').addEventListener('click', () => {
+    navigator.clipboard?.writeText(code).catch(() => {});
+    $('waiting-copy-btn').textContent = 'copied!';
+    setTimeout(() => { $('waiting-copy-btn').textContent = 'copy'; }, 1500);
+  });
+
+  $('start-game-btn').addEventListener('click', () => {
+    socket.emit('start_game');
+  });
+}
+
+function renderWaitingPlayers() {
+  const container = $('waiting-players');
+  $('waiting-player-count').textContent = lobbyPlayers.length;
+  container.innerHTML = '';
+  lobbyPlayers.forEach(p => {
+    const isYou = p.id === myId;
+    const isHost = p.id === lobbyCreatorId;
+    const div = document.createElement('div');
+    div.className = 'waiting-player';
+    div.innerHTML =
+      `<div class="waiting-player-dot" style="background:${p.color}"></div>` +
+      `<span>${escHtml(p.name)}</span>` +
+      (isYou  ? ' <span class="waiting-tag you">YOU</span>'  : '') +
+      (isHost ? ' <span class="waiting-tag host">HOST</span>' : '');
+    container.appendChild(div);
+  });
+}
+
+function enterGame(state) {
+  waitingRoom.classList.remove('open');
   lobby.style.display = 'none';
   app.style.display = 'block';
   fitApp();
-  $('disp-room-code').textContent = code;
+  $('disp-room-code').textContent = roomCode;
   startTimer(state.timerEndsAt);
   applyState(state);
   setupEventListeners();
