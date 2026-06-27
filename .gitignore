@@ -24,3 +24,5 @@ Thumbs.db
 # Build / cache
 .npm
 .cache
+
+CLAUDE.md
