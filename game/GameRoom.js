@@ -78,29 +78,47 @@ class GameRoom {
     this.startedAt = Date.now();
   }
 
-  addPlayer(socketId, name) {
+  addPlayer(clientId, name, socketId) {
     const color = PLAYER_COLORS[this.colorIndex % PLAYER_COLORS.length];
     this.colorIndex++;
     const player = {
-      id: socketId,
+      id: clientId,        // stable identity, survives socket reconnects
+      socketId,            // current transport; updated on reconnect
       name: name.slice(0, 16),
       color,
       score: 0,
       cx: 400,
       cy: 300,
       holdingId: null,
+      connected: true,
     };
-    this.players.set(socketId, player);
+    this.players.set(clientId, player);
     return player;
   }
 
-  removePlayer(socketId) {
-    const player = this.players.get(socketId);
+  getPlayer(clientId) {
+    return this.players.get(clientId);
+  }
+
+  // Free whatever piece a player is holding, without removing the player.
+  // Used on disconnect so a dropped client doesn't leave a piece locked.
+  releaseHeldPiece(clientId) {
+    const player = this.players.get(clientId);
+    if (!player || player.holdingId == null) return null;
+    const piece = this.pieces.find(p => p.id === player.holdingId);
+    player.holdingId = null;
+    if (!piece) return null;
+    piece.heldBy = null;
+    return { pieceId: piece.id, x: piece.x, y: piece.y };
+  }
+
+  removePlayer(clientId) {
+    const player = this.players.get(clientId);
     if (player && player.holdingId != null) {
       const piece = this.pieces.find(p => p.id === player.holdingId);
       if (piece) piece.heldBy = null;
     }
-    this.players.delete(socketId);
+    this.players.delete(clientId);
   }
 
   isEmpty() {

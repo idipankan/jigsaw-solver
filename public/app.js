@@ -109,6 +109,44 @@ let selectedTimerMins = 10;
 let isCreator = false;
 let lobbyPlayers = [];
 let lobbyCreatorId = null;
+let gameEntered = false;      // guards one-time game UI setup across reconnects
+let lobbyBound = false;       // guards one-time lobby listener binding
+let joinPayload = null;       // resent on every (re)connect to re-register
+
+/* Stable per-tab identity so a socket reconnect (new socket.id) can reclaim
+   the same player on the server instead of being treated as a new join. */
+function getClientId() {
+  let id = sessionStorage.getItem('jigsawClientId');
+  if (!id) {
+    id = (crypto.randomUUID && crypto.randomUUID()) ||
+      ('c-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    sessionStorage.setItem('jigsawClientId', id);
+  }
+  return id;
+}
+
+/* Connection status banner — surfaces drops so a desync is never silent. */
+function setConnStatus(state) {
+  let el = document.getElementById('conn-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'conn-status';
+    el.style.cssText = [
+      'position:fixed', 'top:12px', 'left:50%', 'transform:translateX(-50%)',
+      'z-index:9999', 'padding:8px 16px', 'border-radius:8px',
+      'font:600 13px ui-monospace,monospace', 'color:#fff', 'display:none',
+      'box-shadow:0 4px 14px rgba(0,0,0,.25)',
+    ].join(';');
+    document.body.appendChild(el);
+  }
+  if (state === 'lost') {
+    el.textContent = '⚠ connection lost — reconnecting…';
+    el.style.background = '#C8533C';
+    el.style.display = 'block';
+  } else if (state === 'ok') {
+    el.style.display = 'none';
+  }
+}
 
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
@@ -195,16 +233,38 @@ function joinGame() {
   roomCode = room;
 
   socket = io();
-  socket.emit('join', { roomCode: room, playerName: name, pieceCount: selectedPieceCount, timerDuration: selectedTimerMins, imageUrl });
+  joinPayload = {
+    roomCode: room, playerName: name, clientId: getClientId(),
+    pieceCount: selectedPieceCount, timerDuration: selectedTimerMins, imageUrl,
+  };
+
+  // Re-emit join on every (re)connect. The server reclaims our player by
+  // clientId and replies with fresh authoritative state, so a dropped
+  // connection self-heals instead of silently desyncing.
+  socket.on('connect', () => {
+    socket.emit('join', joinPayload);
+    setConnStatus('ok');
+  });
+  socket.on('disconnect', () => setConnStatus('lost'));
 
   // Lobby path: room not yet started
   socket.on('lobby_init', onLobbyInit);
 
-  // Mid-game join path: room already started
+  // Mid-game join path: room already started. On reconnect (already in the
+  // game) just re-sync authoritative state instead of re-running setup.
   socket.on('init', ({ playerId, roomCode: code, state }) => {
     myId = playerId;
     roomCode = code;
-    enterGame(state);
+    if (gameEntered) resyncState(state);
+    else enterGame(state);
+  });
+
+  // Authoritative end-of-game from the server — overrides any local drift
+  // so every client shows the same final modal.
+  socket.on('game_over', ({ state }) => {
+    applyState(state);
+    clearInterval(timerInterval);
+    showTimerWinner();
   });
 
   // All lobby players receive this when creator starts the game
@@ -312,15 +372,20 @@ function onLobbyInit({ playerId, roomCode: code, isCreator: creator, creatorId, 
 
   renderWaitingPlayers();
 
-  $('waiting-copy-btn').addEventListener('click', () => {
-    navigator.clipboard?.writeText(code).catch(() => {});
-    $('waiting-copy-btn').textContent = 'copied!';
-    setTimeout(() => { $('waiting-copy-btn').textContent = 'copy'; }, 1500);
-  });
+  // Bind these once — onLobbyInit can fire again on a lobby reconnect.
+  if (!lobbyBound) {
+    lobbyBound = true;
 
-  $('start-game-btn').addEventListener('click', () => {
-    socket.emit('start_game');
-  });
+    $('waiting-copy-btn').addEventListener('click', () => {
+      navigator.clipboard?.writeText(roomCode).catch(() => {});
+      $('waiting-copy-btn').textContent = 'copied!';
+      setTimeout(() => { $('waiting-copy-btn').textContent = 'copy'; }, 1500);
+    });
+
+    $('start-game-btn').addEventListener('click', () => {
+      socket.emit('start_game');
+    });
+  }
 }
 
 function renderWaitingPlayers() {
@@ -350,6 +415,15 @@ function enterGame(state) {
   startTimer(state.timerEndsAt);
   applyState(state);
   setupEventListeners();
+  gameEntered = true;
+}
+
+/* Re-apply authoritative state after a reconnect without re-binding listeners
+   (which would cause duplicate emits). Abandons any in-progress local drag. */
+function resyncState(state) {
+  dragging = null;
+  applyState(state);
+  startTimer(state.timerEndsAt);
 }
 
 function applyState(state) {
