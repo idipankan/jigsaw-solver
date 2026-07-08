@@ -83,9 +83,19 @@ io.on('connection', (socket) => {
   let currentPlayer = null;
   let currentClientId = null;
 
-  socket.on('join', ({ roomCode, playerName, clientId, pieceCount, timerDuration, imageUrl }) => {
+  socket.on('join', ({ roomCode, playerName, clientId, pieceCount, timerDuration, imageUrl, viaLink }) => {
     if (!roomCode || !clientId) return;
     const isNewRoom = !rooms.has(roomCode);
+
+    // A shared room link points at a room that no longer exists (finished
+    // and garbage-collected, or never existed). Refuse to silently spin up
+    // a brand-new room under that code — tell the client so it can bounce
+    // the user back to the lobby instead of dropping them into an empty room.
+    if (isNewRoom && viaLink) {
+      socket.emit('room_expired', { roomCode });
+      return;
+    }
+
     const room = getOrCreateRoom(roomCode, pieceCount, timerDuration, imageUrl);
     if (isNewRoom) room.creatorId = clientId;
 

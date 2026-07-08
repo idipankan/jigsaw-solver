@@ -148,6 +148,16 @@ function setConnStatus(state) {
   }
 }
 
+/* Shared-link joins point at a room the server no longer has (finished and
+   GC'd, or never existed). Tell the user, then bounce to a clean lobby. */
+function showExpiredRoomNote() {
+  const note = document.getElementById('lobby-expired-note');
+  if (note) note.style.display = 'block';
+  setTimeout(() => {
+    window.location.href = window.location.pathname;
+  }, 2200);
+}
+
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
 const lobby = $('lobby');
@@ -163,10 +173,12 @@ const refImg = $('ref-img');
 const winBanner = $('win-banner');
 
 /* ── URL deep-link: ?roomCode=XYZ pre-fills and locks the room code ── */
+let joinedViaUrl = false;
 (function initFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const urlRoom = params.get('roomCode');
   if (!urlRoom) return;
+  joinedViaUrl = true;
 
   const inp = $('inp-room');
   inp.value = urlRoom.toUpperCase();
@@ -261,6 +273,7 @@ function joinGame() {
   joinPayload = {
     roomCode: room, playerName: name, clientId: getClientId(),
     pieceCount: selectedPieceCount, timerDuration: selectedTimerMins, imageUrl,
+    viaLink: joinedViaUrl,
   };
 
   // Re-emit join on every (re)connect. The server reclaims our player by
@@ -271,6 +284,14 @@ function joinGame() {
     setConnStatus('ok');
   });
   socket.on('disconnect', () => setConnStatus('lost'));
+
+  // The room this share link points at is gone (finished and cleaned up, or
+  // never existed) — tell the user and bounce them back to a clean lobby
+  // instead of quietly creating a brand-new empty room under that code.
+  socket.on('room_expired', () => {
+    socket.disconnect();
+    showExpiredRoomNote();
+  });
 
   // Lobby path: room not yet started
   socket.on('lobby_init', onLobbyInit);
@@ -480,6 +501,12 @@ function applyState(state) {
   boardGrid.style.width  = boardPx + 'px';
   boardGrid.style.height = boardPx + 'px';
   $('board-container').style.width = (boardPx + 60) + 'px';
+
+  // Grid line spacing is drawn separately from the board's own size — keep it
+  // in sync with the current piece size, or it stays at its 50px default and
+  // visually reads as a 10×10 board regardless of the actual piece count.
+  const gridOverlay = boardGrid.querySelector('.grid-overlay');
+  if (gridOverlay) gridOverlay.style.backgroundSize = `${PSZ}px ${PSZ}px`;
 
   // apply image from room state (for players joining mid-game)
   if (state.svgIndex !== undefined) svgIndex = state.svgIndex;
