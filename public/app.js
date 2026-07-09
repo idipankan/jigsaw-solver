@@ -415,6 +415,8 @@ function joinGame() {
     applyState(state);
     startTimer(state.timerEndsAt);
     winBanner.classList.remove('open');
+    cancelAnimationFrame(confettiRAF);
+    confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
   });
 }
 
@@ -817,6 +819,50 @@ function checkWin() {
   if (pieces.length > 0 && pieces.every(p => p.placed)) showCompleteModal();
 }
 
+function renderPodium(ranked) {
+  const podiumEl = $('podium');
+  const restEl = $('rest-list');
+  const hasScores = ranked.some(p => p.score > 0);
+
+  if (!hasScores) {
+    podiumEl.classList.remove('show');
+    restEl.classList.remove('show');
+    podiumEl.innerHTML = '';
+    restEl.innerHTML = '';
+    return;
+  }
+
+  const top3 = ranked.slice(0, 3);
+  const order = [1, 0, 2].filter(i => top3[i]); // silver, gold, bronze visual order
+  podiumEl.innerHTML = order.map(i => {
+    const p = top3[i];
+    const rank = i + 1;
+    return `
+      <div class="podium-slot rank-${rank}">
+        <div class="p-dot" style="background:${p.color}">${rank}</div>
+        <div class="p-name">${escHtml(p.name)}</div>
+        <div class="p-score">${p.score}</div>
+        <div class="podium-block" style="background:${p.color}"></div>
+      </div>`;
+  }).join('');
+  podiumEl.classList.add('show');
+
+  const rest = ranked.slice(3);
+  if (rest.length) {
+    restEl.innerHTML = rest.map((p, i) => `
+      <div class="rest-row">
+        <span class="r-rank">${String(i + 4).padStart(2, '0')}</span>
+        <span class="r-dot" style="background:${p.color}"></span>
+        <span class="r-name">${escHtml(p.name)}</span>
+        <span>${p.score}</span>
+      </div>`).join('');
+    restEl.classList.add('show');
+  } else {
+    restEl.innerHTML = '';
+    restEl.classList.remove('show');
+  }
+}
+
 function showCompleteModal() {
   clearInterval(timerInterval);
 
@@ -845,7 +891,9 @@ function showCompleteModal() {
     }
   }
 
+  renderPodium(ranked);
   winBanner.classList.add('open');
+  if (winner && winner.score > 0) fireConfetti(ranked.slice(0, 3).map(p => p.color));
 }
 
 function showTimerWinner() {
@@ -866,7 +914,65 @@ function showTimerWinner() {
     }
   }
 
+  renderPodium(ranked);
   winBanner.classList.add('open');
+  if (winner && winner.score > 0) fireConfetti(ranked.slice(0, 3).map(p => p.color));
+}
+
+/* ── Confetti ── */
+const confettiCanvas = $('confetti-canvas');
+const confettiCtx = confettiCanvas.getContext('2d');
+let confettiRAF = null;
+
+function fireConfetti(colors) {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const rect = winBanner.getBoundingClientRect();
+  confettiCanvas.width = rect.width;
+  confettiCanvas.height = rect.height;
+
+  const palette = colors.length ? colors : ['#1a1a1a'];
+  const particles = Array.from({ length: 140 }, () => ({
+    x: confettiCanvas.width / 2 + (Math.random() - 0.5) * 200,
+    y: confettiCanvas.height * 0.32 + (Math.random() - 0.5) * 40,
+    vx: (Math.random() - 0.5) * 7,
+    vy: -Math.random() * 8 - 3,
+    size: Math.random() * 5 + 3,
+    color: palette[Math.floor(Math.random() * palette.length)],
+    rot: Math.random() * Math.PI * 2,
+    vrot: (Math.random() - 0.5) * 0.3,
+    life: 0,
+  }));
+
+  const gravity = 0.22;
+  const startTime = performance.now();
+  const duration = 2600;
+
+  cancelAnimationFrame(confettiRAF);
+  function frame(now) {
+    const elapsed = now - startTime;
+    confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    particles.forEach(p => {
+      p.vy += gravity;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vrot;
+      p.life = elapsed / duration;
+      confettiCtx.save();
+      confettiCtx.globalAlpha = Math.max(0, 1 - p.life);
+      confettiCtx.translate(p.x, p.y);
+      confettiCtx.rotate(p.rot);
+      confettiCtx.fillStyle = p.color;
+      confettiCtx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
+      confettiCtx.restore();
+    });
+    if (elapsed < duration) {
+      confettiRAF = requestAnimationFrame(frame);
+    } else {
+      confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    }
+  }
+  confettiRAF = requestAnimationFrame(frame);
 }
 
 /* ── Event listeners ── */
@@ -965,6 +1071,8 @@ function setupEventListeners() {
   $('play-again-btn').addEventListener('click', () => {
     socket.emit('scramble');
     winBanner.classList.remove('open');
+    cancelAnimationFrame(confettiRAF);
+    confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
   });
 
 }

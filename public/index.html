@@ -330,18 +330,64 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #F4F2EC; f
   z-index: 600; align-items: center; justify-content: center;
 }
 #win-banner.open { display: flex; }
+#confetti-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 601;
+}
 .win-card {
+  position: relative; z-index: 602;
   background: #fff; border: 1px solid #E5E2D9; border-radius: 6px;
-  padding: 40px 56px; display: flex; flex-direction: column;
-  align-items: center; gap: 20px; animation: pop .22s ease-out;
+  padding: 36px 48px; display: flex; flex-direction: column;
+  align-items: center; gap: 18px; animation: pop .22s ease-out;
+  max-width: 480px;
 }
 .win-title { font: 600 28px 'IBM Plex Sans', sans-serif; }
-.win-sub { font: 400 13px 'IBM Plex Mono', monospace; color: #6b6b6b; }
+.win-sub { font: 400 13px 'IBM Plex Mono', monospace; color: #6b6b6b; text-align: center; }
 .win-play-btn {
   background: #1a1a1a; color: #fff; border: none; border-radius: 4px;
   padding: 11px 28px; font: 500 13px 'IBM Plex Mono', monospace; cursor: pointer;
-  letter-spacing: .04em; margin-top: 8px;
+  letter-spacing: .04em; margin-top: 4px;
 }
+
+/* Podium */
+.podium { display: none; align-items: flex-end; gap: 10px; margin-top: 4px; }
+.podium.show { display: flex; }
+.podium-slot { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 108px; }
+.podium-slot .p-dot {
+  width: 34px; height: 34px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center;
+  font: 600 13px 'IBM Plex Mono', monospace; color: #fff;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px #E5E2D9;
+}
+.podium-slot.rank-1 .p-dot { width: 42px; height: 42px; font-size: 15px; }
+.p-name {
+  font: 500 12px 'IBM Plex Sans', sans-serif; color: #1a1a1a;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.p-score { font: 400 11px 'IBM Plex Mono', monospace; color: #6b6b6b; }
+.podium-block {
+  width: 100%; border-radius: 4px 4px 0 0;
+  animation: rise .32s ease-out backwards; transform-origin: bottom;
+}
+.podium-slot.rank-1 .podium-block { height: 92px; animation-delay: .12s; }
+.podium-slot.rank-2 .podium-block { height: 66px; animation-delay: .04s; }
+.podium-slot.rank-3 .podium-block { height: 46px; animation-delay: 0s; }
+@keyframes rise { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+
+/* Rest-of-field list, ranks 4+ */
+.rest-list {
+  display: none; flex-direction: column; gap: 4px; width: 100%;
+  max-height: 120px; overflow-y: auto; margin-top: -4px;
+}
+.rest-list.show { display: flex; }
+.rest-row {
+  display: flex; align-items: center; gap: 8px;
+  font: 400 12px 'IBM Plex Mono', monospace; color: #6b6b6b;
+  padding: 3px 4px;
+}
+.rest-row .r-rank { width: 18px; color: #9a9a9a; }
+.rest-row .r-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rest-row .r-name { flex: 1; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -541,9 +587,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #F4F2EC; f
 
   <!-- Win banner -->
   <div id="win-banner">
+    <canvas id="confetti-canvas"></canvas>
     <div class="win-card">
       <div class="win-title" id="win-title">puzzle complete!</div>
       <div class="win-sub" id="win-sub">all 100 pieces placed</div>
+      <div class="podium" id="podium"></div>
+      <div class="rest-list" id="rest-list"></div>
       <button class="win-play-btn" id="play-again-btn">play again →</button>
     </div>
   </div>
